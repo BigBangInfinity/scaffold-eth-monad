@@ -1,16 +1,15 @@
 "use client";
 
-import React from "react";
 import Link from "next/link";
-import { BrowserProvider, Contract, JsonRpcProvider, formatEther, formatUnits, parseUnits } from "ethers";
 import type { NextPage } from "next";
+import React from "react";
 import { useAccount } from "wagmi";
 import { BoltIcon, BookOpenIcon, BugAntIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { Address } from "~~/components/scaffold-eth";
+// Import ethers functions and providers from ethers v6
+import { formatEther, formatUnits, Contract, BrowserProvider, JsonRpcProvider, parseUnits } from "ethers";
 
-// --- ABIs ---
-
-// Minimal read-only ERC-20 ABI (for balanceOf)
+// Minimal ERC-20 ABI for balanceOf (read-only)
 const erc20ReadAbi = [
   {
     constant: true,
@@ -21,58 +20,47 @@ const erc20ReadAbi = [
   },
 ];
 
-// Minimal write ERC-20 ABI (for approve)
-const erc20ApproveAbi = ["function approve(address spender, uint256 amount) external returns (bool)"];
-
-// Minimal ERC4626 vault ABI (for deposit & redeem)
-const vaultAbi = [
-  "function deposit(uint256 assets, address receiver) external returns (uint256 shares)",
-  "function redeem(uint256 shares, address receiver, address owner) external returns (uint256 assets)",
+// Minimal ERC-20 ABI for approve (write)
+const erc20ApproveAbi = [
+  "function approve(address spender, uint256 amount) public returns (bool)"
 ];
 
-// --- Contract Addresses ---
-const USDC_CONTRACT = "0xf817257fed379853cDe0fa4F97AB987181B1E5Ea"; // 6 decimals
-const THYRA_CONTRACT = "0x8082f7867b21c11f8D8a15010294c12A811530F6"; // Vault & share token
+// Contract addresses on Monad testnet
+const USDC_CONTRACT = "0xf817257fed379853cDe0fa4F97AB987181B1E5Ea";
+const THYRA_CONTRACT = "0x8082f7867b21c11f8D8a15010294c12A811530F6";
 
 const Home: NextPage = () => {
   const { address: connectedAddress } = useAccount();
-
+  
   // Create a provider: use window.ethereum if available; otherwise, use your RPC URL.
   const provider =
     typeof window !== "undefined" && window.ethereum
       ? new BrowserProvider(window.ethereum)
       : new JsonRpcProvider(process.env.NEXT_PUBLIC_MONAD_RPC_URL);
 
-  // --- Balances ---
+  // State variables for balances
   const [monBalance, setMonBalance] = React.useState("");
   const [usdcBalance, setUsdcBalance] = React.useState("");
   const [thyraBalance, setThyraBalance] = React.useState("");
 
-  // --- Approve State ---
+  // State for the approval amount input (as a string)
   const [approvalAmount, setApprovalAmount] = React.useState("");
 
-  // --- Deposit State ---
-  const [depositAmount, setDepositAmount] = React.useState("");
-
-  // --- Redeem State ---
-  const [redeemAmount, setRedeemAmount] = React.useState("");
-
-  // --- Fetch Balances ---
   React.useEffect(() => {
     if (!connectedAddress || !provider) return;
 
     const fetchBalances = async () => {
       try {
-        // Native MON balance
+        // Native MON balance (similar to Ether on Ethereum)
         const nativeBal = await provider.getBalance(connectedAddress);
-        setMonBalance(formatEther(nativeBal));
+        setMonBalance(formatEther(nativeBal)); // MON likely uses 18 decimals
 
-        // USDC balance (6 decimals)
+        // USDC balance (usually 6 decimals)
         const usdcContract = new Contract(USDC_CONTRACT, erc20ReadAbi, provider);
         const rawUsdcBal = await usdcContract.balanceOf(connectedAddress);
         setUsdcBalance(formatUnits(rawUsdcBal, 6));
 
-        // THYRA shares (18 decimals). If THYRA is indeed the share token, this should show the user's shares.
+        // THYRA balance (assuming 18 decimals)
         const thyraContract = new Contract(THYRA_CONTRACT, erc20ReadAbi, provider);
         const rawThyraBal = await thyraContract.balanceOf(connectedAddress);
         setThyraBalance(formatEther(rawThyraBal));
@@ -84,7 +72,7 @@ const Home: NextPage = () => {
     fetchBalances();
   }, [connectedAddress, provider]);
 
-  // --- Approve USDC ---
+  // Handler for the Approve button click
   const handleApprove = async () => {
     if (!connectedAddress) {
       console.error("Wallet not connected");
@@ -92,57 +80,17 @@ const Home: NextPage = () => {
     }
 
     try {
-      const signer = await provider.getSigner(); // ethers v6 => getSigner() returns a Promise
+      // For a transaction we need a signer.
+      const signer = await provider.getSigner();
+      // Now 'signer' is a valid signer, not a Promise
       const usdcContract = new Contract(USDC_CONTRACT, erc20ApproveAbi, signer);
-      const amount = parseUnits(approvalAmount, 6); // parse with 6 decimals
+      const amount = parseUnits(approvalAmount, 6);
       const tx = await usdcContract.approve(THYRA_CONTRACT, amount);
       console.log("Approval transaction sent:", tx);
       await tx.wait();
       console.log("Approval transaction confirmed:", tx);
     } catch (err) {
       console.error("Error approving USDC:", err);
-    }
-  };
-
-  // --- Deposit USDC into Vault ---
-  const handleDeposit = async () => {
-    if (!connectedAddress) {
-      console.error("Wallet not connected");
-      return;
-    }
-
-    try {
-      const signer = await provider.getSigner();
-      const vaultContract = new Contract(THYRA_CONTRACT, vaultAbi, signer);
-      // deposit(uint256 assets, address receiver)
-      const assets = parseUnits(depositAmount, 6); // parse with 6 decimals
-      const tx = await vaultContract.deposit(assets, connectedAddress);
-      console.log("Deposit transaction sent:", tx);
-      await tx.wait();
-      console.log("Deposit transaction confirmed:", tx);
-    } catch (err) {
-      console.error("Error depositing USDC:", err);
-    }
-  };
-
-  // --- Redeem THYRA shares for USDC ---
-  const handleRedeem = async () => {
-    if (!connectedAddress) {
-      console.error("Wallet not connected");
-      return;
-    }
-
-    try {
-      const signer = await provider.getSigner();
-      const vaultContract = new Contract(THYRA_CONTRACT, vaultAbi, signer);
-      // redeem(uint256 shares, address receiver, address owner)
-      const shares = parseUnits(redeemAmount, 18); // parse with 18 decimals for THYRA
-      const tx = await vaultContract.redeem(shares, connectedAddress, connectedAddress);
-      console.log("Redeem transaction sent:", tx);
-      await tx.wait();
-      console.log("Redeem transaction confirmed:", tx);
-    } catch (err) {
-      console.error("Error redeeming THYRA shares:", err);
     }
   };
 
@@ -190,7 +138,7 @@ const Home: NextPage = () => {
           )}
         </div>
 
-        {/* Approve USDC for Vault */}
+        {/* Approve USDC for vault Section */}
         <div className="mt-12 text-center">
           <h2 className="text-2xl font-bold">Approve USDC for vault</h2>
           <div className="mt-4 flex justify-center items-center space-x-4">
@@ -200,54 +148,17 @@ const Home: NextPage = () => {
               placeholder="Enter USDC amount"
               className="input input-bordered w-64"
               value={approvalAmount}
-              onChange={e => setApprovalAmount(e.target.value)}
+              onChange={(e) => setApprovalAmount(e.target.value)}
             />
             <button className="btn btn-primary" onClick={handleApprove}>
               Approve
             </button>
           </div>
-          <p className="mt-2 text-sm">Enter the USDC amount (in whole units) to approve for the vault contract.</p>
+          <p className="mt-2 text-sm">
+            Enter the USDC amount (in whole units) you want to approve for the vault contract.
+          </p>
         </div>
 
-        {/* Deposit USDC into Vault */}
-        <div className="mt-12 text-center">
-          <h2 className="text-2xl font-bold">Deposit USDC into vault</h2>
-          <div className="mt-4 flex justify-center items-center space-x-4">
-            <input
-              type="number"
-              step="any"
-              placeholder="Enter USDC amount"
-              className="input input-bordered w-64"
-              value={depositAmount}
-              onChange={e => setDepositAmount(e.target.value)}
-            />
-            <button className="btn btn-primary" onClick={handleDeposit}>
-              Deposit USDC
-            </button>
-          </div>
-          <p className="mt-2 text-sm">Enter the USDC amount (in whole units) to deposit into the vault.</p>
-        </div>
-
-        {/* Redeem THYRA shares for USDC */}
-        <div className="mt-12 text-center">
-          <h2 className="text-2xl font-bold">Redeem THYRA shares for USDC</h2>
-          <div className="mt-4 flex justify-center items-center space-x-4">
-            <input
-              type="number"
-              step="any"
-              placeholder="Enter THYRA shares"
-              className="input input-bordered w-64"
-              value={redeemAmount}
-              onChange={e => setRedeemAmount(e.target.value)}
-            />
-            <button className="btn btn-primary" onClick={handleRedeem}>
-              Redeem THYRA shares
-            </button>
-          </div>
-          <p className="mt-2 text-sm">Enter the THYRA shares (in whole units) to redeem from the vault.</p>
-        </div>
-
-        {/* Footer Section */}
         <div className="flex-grow bg-base-300 w-full mt-16 px-8 py-12">
           <div className="flex justify-center items-center gap-12 flex-col sm:flex-row">
             <div className="flex flex-col bg-base-200 border-base-100 border-2 px-10 py-10 text-center items-center max-w-xs rounded-3xl">

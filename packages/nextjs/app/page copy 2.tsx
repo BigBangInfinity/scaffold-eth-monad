@@ -1,0 +1,159 @@
+"use client";
+
+import Link from "next/link";
+import type { NextPage } from "next";
+import React from "react";
+import { useAccount } from "wagmi";
+import { BoltIcon, BookOpenIcon, BugAntIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { Address } from "~~/components/scaffold-eth";
+// Import ethers functions and providers from ethers v6
+import { formatEther, formatUnits, Contract, BrowserProvider, JsonRpcProvider } from "ethers";
+
+// Minimal ERC-20 ABI for balanceOf
+const erc20Abi = [
+  {
+    constant: true,
+    inputs: [{ name: "_owner", type: "address" }],
+    name: "balanceOf",
+    outputs: [{ name: "balance", type: "uint256" }],
+    type: "function",
+  },
+];
+
+// Contract addresses on Monad testnet
+const USDC_CONTRACT = "0xf817257fed379853cDe0fa4F97AB987181B1E5Ea";
+const THYRA_CONTRACT = "0x8082f7867b21c11f8D8a15010294c12A811530F6";
+
+const Home: NextPage = () => {
+  const { address: connectedAddress } = useAccount();
+  
+  // Create a provider: use window.ethereum if available; otherwise, use your RPC URL.
+  const provider =
+    typeof window !== "undefined" && window.ethereum
+      ? new BrowserProvider(window.ethereum)
+      : new JsonRpcProvider(process.env.NEXT_PUBLIC_MONAD_RPC_URL);
+
+  // State variables for balances
+  const [monBalance, setMonBalance] = React.useState("");
+  const [usdcBalance, setUsdcBalance] = React.useState("");
+  const [thyraBalance, setThyraBalance] = React.useState("");
+
+  React.useEffect(() => {
+    if (!connectedAddress || !provider) return;
+
+    const fetchBalances = async () => {
+      try {
+        // Native MON balance (similar to Ether on Ethereum)
+        const nativeBal = await provider.getBalance(connectedAddress);
+        setMonBalance(formatEther(nativeBal)); // MON likely uses 18 decimals
+
+        // USDC balance (usually 6 decimals)
+        const usdcContract = new Contract(USDC_CONTRACT, erc20Abi, provider);
+        const rawUsdcBal = await usdcContract.balanceOf(connectedAddress);
+        setUsdcBalance(formatUnits(rawUsdcBal, 6));
+
+        // THYRA balance (assuming 18 decimals)
+        const thyraContract = new Contract(THYRA_CONTRACT, erc20Abi, provider);
+        const rawThyraBal = await thyraContract.balanceOf(connectedAddress);
+        setThyraBalance(formatEther(rawThyraBal));
+      } catch (err) {
+        console.error("Error fetching balances:", err);
+      }
+    };
+
+    fetchBalances();
+  }, [connectedAddress, provider]);
+
+  return (
+    <>
+      <div className="flex items-center flex-col flex-grow pt-10">
+        <div className="px-5">
+          <h1 className="text-center">
+            <span className="block text-2xl mb-2">Welcome to</span>
+            <span className="block text-4xl font-bold">Scaffold-ETH-Monad</span>
+          </h1>
+          <div className="flex justify-center items-center space-x-2 flex-col sm:flex-row">
+            <p className="my-2 font-medium">Connected Address:</p>
+            <Address address={connectedAddress} />
+          </div>
+          <p className="text-center text-lg">
+            Get started by editing{" "}
+            <code className="italic bg-base-300 text-base font-bold max-w-full break-words break-all inline-block">
+              packages/nextjs/app/page.tsx
+            </code>
+          </p>
+          <p className="text-center text-lg">
+            Edit your smart contract{" "}
+            <code className="italic bg-base-300 text-base font-bold max-w-full break-words break-all inline-block">
+              YourContract.sol
+            </code>{" "}
+            in{" "}
+            <code className="italic bg-base-300 text-base font-bold max-w-full break-words break-all inline-block">
+              packages/hardhat/contracts
+            </code>
+          </p>
+        </div>
+
+        {/* Balances Section */}
+        <div className="mt-8 text-center">
+          <h2 className="text-2xl font-bold">My Balances</h2>
+          {!connectedAddress ? (
+            <p>Please connect your wallet.</p>
+          ) : (
+            <div className="mt-4 space-y-2">
+              <p>MON: {monBalance}</p>
+              <p>USDC: {usdcBalance}</p>
+              <p>THYRA: {thyraBalance}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex-grow bg-base-300 w-full mt-16 px-8 py-12">
+          <div className="flex justify-center items-center gap-12 flex-col sm:flex-row">
+            <div className="flex flex-col bg-base-200 border-base-100 border-2 px-10 py-10 text-center items-center max-w-xs rounded-3xl">
+              <BoltIcon className="h-8 w-8" />
+              <p>
+                Get testnet funds from the{" "}
+                <Link href="#" passHref className="link">
+                  Faucet
+                </Link>
+              </p>
+            </div>
+            <div className="flex flex-col bg-base-200 border-base-100 border-2 px-10 py-10 text-center items-center max-w-xs rounded-3xl">
+              <BugAntIcon className="h-8 w-8" />
+              <p>
+                Tinker with your smart contract using the{" "}
+                <Link href="/debug" passHref className="link">
+                  Debug Contracts
+                </Link>{" "}
+                tab.
+              </p>
+            </div>
+            <div className="flex flex-col bg-base-200 border-base-100 border-2 px-10 py-10 text-center items-center max-w-xs rounded-3xl">
+              <MagnifyingGlassIcon className="h-8 w-8" />
+              <p>
+                Explore your local transactions with the{" "}
+                <Link href="#" passHref className="link">
+                  Block Explorer
+                </Link>{" "}
+                tab.
+              </p>
+            </div>
+            <div className="flex flex-col bg-base-200 border-base-100 border-2 px-10 py-10 text-center items-center max-w-xs rounded-3xl">
+              <BookOpenIcon className="h-8 w-8" />
+              <p>
+                Learn more about{" "}
+                <Link href="https://docs.monad.xyz" passHref className="link" target="_blank">
+                  Monad
+                </Link>
+                .
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+};
+
+export default Home;
